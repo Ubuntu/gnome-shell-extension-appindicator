@@ -80,7 +80,6 @@ class AppIndicatorPreferences extends Gtk.Box {
         widget = new Gtk.SpinButton({halign: Gtk.Align.END});
         widget.set_sensitive(true);
         widget.set_range(0, 255);
-        widget.set_value(this._settings.get_int('icon-opacity'));
         widget.set_increments(1, 2);
         widget.connect('value-changed', w => {
             this._settings.set_int('icon-opacity', w.get_value_as_int());
@@ -323,69 +322,136 @@ class AppIndicatorPreferences extends Gtk.Box {
 
 const SettingsKey = {
     LEGACY_TRAY_ENABLED: 'legacy-tray-enabled',
-    ICON_SIZE: 'icon-size'
-}
+    ICON_SIZE: 'icon-size',
+    ICON_OPACITY: 'icon-opacity',
+    ICON_SATURATION: 'icon-saturation',
+    ICON_BRIGHTNESS: 'icon-brightness',
+    ICON_CONTRAST: 'icon-contrast',
+    TRAY_POS: 'tray-pos'
+};
+
+let ComboItems = ['center', 'left', 'right'];
 
 const GeneralPage = GObject.registerClass(
-    class AppIndicatorGeneralPage extends Adw.PreferencesPage {
-        _init(settings, settingsKey) {
-            super._init({
-                title: _('General'),
-                icon_name: 'general-symbolic',
-                name: 'General Page'
-            });
-
-            this._settings = settings;
-            this._settingsKey = settingsKey;
-
-            let group = new Adw.PreferencesGroup();  // no title since only single group
-
-            let legacyTraySwitch = new Adw.SwitchRow({
-                title: _('Enable Legacy Tray Icons support'),
-                subtitle: _('don\'t know what subtitle to put yet. maybe'), 
-                active: this._settings.get_boolean(this._settingsKey.LEGACY_TRAY_ENABLED)
-            });
-
-            let sizeSpin = Adw.SpinRow.new_with_range(0, 96, 2);
-            sizeSpin.title = "Icon Size";
-            sizeSpin.set_value(this._settings.get_int(this._settingsKey.ICON_SIZE));
-
-            /*
-        label = new Gtk.Label({
-            label: _('Icon size (min: 0, max: 96)'),
-            hexpand: true,
-            halign: Gtk.Align.START,
+class AppIndicatorGeneralPage extends Adw.PreferencesPage {
+    _init(settings, settingsKey) {
+        super._init({
+            title: _('General'),
+            icon_name: 'general-symbolic',
+            name: 'General Page'
         });
-        widget = new Gtk.SpinButton({halign: Gtk.Align.END});
-        widget.set_sensitive(true);
-        widget.set_range(0, 96);
-        widget.set_value(this._settings.get_int('icon-size'));
-        widget.set_increments(1, 2);
-        widget.connect('value-changed', w => {
-            this._settings.set_int('icon-size', w.get_value_as_int());
-        });*/
 
-            group.add(legacyTraySwitch);
-            group.add(sizeSpin);
-            this.add(group);
+        this._settings = settings;
+        this._settingsKey = settingsKey;
 
-            //==================
-            //   Bind Signals
-            //==================
-            legacyTraySwitch.connect('notify::active', (widget) => {
-                this._settings.set_boolean(this._settingsKey.LEGACY_TRAY_ENABLED, widget.get_active())
-            }); 
-            sizeSpin.connect('input', (widget, value,  data) => {
-                this._settings.set_int(this._settingsKey.ICON_SIZE, parseInt(widget.get_value(),10));
-                return false;
-            });
-            sizeSpin.connect('output', (widget, data) => {
-                this._settings.set_int(this._settingsKey.ICON_SIZE, parseInt(widget.get_value(),10));
-                return false;
-            });
-        }
+        this.group = new Adw.PreferencesGroup();  // no title since only single group
+
+        let legacyTraySwitch = new Adw.SwitchRow({
+            title: _('Enable Legacy Tray Icons support'),
+            subtitle: _('don\'t know what subtitle to put yet. maybe'), 
+            active: this._settings.get_boolean(this._settingsKey.LEGACY_TRAY_ENABLED)
+        });
+
+        legacyTraySwitch.connect('notify::active', (widget) => {
+            this._settings.set_boolean(this._settingsKey.LEGACY_TRAY_ENABLED, widget.get_active())
+        }); 
+
+        this.group.add(legacyTraySwitch);
+
+        this._createSpinRow({
+            title: _("Opacity"),
+            settingsKey: this._settingsKey.ICON_OPACITY,
+            from: 0,
+            to: 255,
+            step: 1,
+            round: true
+        });
+
+        this._createSpinRow({
+            title: _("Desaturation"),
+            settingsKey: this._settingsKey.ICON_SATURATION,
+            from: 0.0,
+            to: 1.0,
+            step: 0.1,
+        });
+
+        this._createSpinRow({
+            title: _("Brightness"),
+            settingsKey: this._settingsKey.ICON_BRIGHTNESS,
+            from: -1.0,
+            to: 1.0,
+            step: 0.1,
+        });
+
+        this._createSpinRow({
+            title: _("Contrast"),
+            settingsKey: this._settingsKey.ICON_CONTRAST,
+            from: -1.0,
+            to: 1.0,
+            step: 0.1,
+        });
+
+        this._createSpinRow({
+            title: _("Icon Size"),
+            settingsKey: this._settingsKey.ICON_SIZE,
+            from: 0,
+            to: 96,
+            step: 2,
+            round: true
+        });
+
+        let alignmentList = new Gtk.StringList();
+    
+        alignmentList.append(_('Center'));
+        alignmentList.append(_('Left'));
+        alignmentList.append(_('Right'));
+    
+        let combo = new Adw.ComboRow({
+            title: _('Tray Horizontal Alignment'),
+            model: alignmentList
+        });
+        combo.connect('notify::selected', (widget, data) =>  {
+            this._settings.set_string(this._settingsKey.TRAY_POS, ComboItems[widget.get_selected()]);
+        });
+
+        this.group.add(combo);
+
+        this.add(this.group);
     }
-)
+    _createSpinRow(args) {
+        let title =  args.title || "Default Title";
+        let subtitle = args.subtitle || null;
+        let settingsKey = args.settingsKey || "";
+        let from = args.from || 0;
+        let to = args.to || 100;
+        let step = args.step || 1;
+        let round = args.round || false;
+
+        let spin = Adw.SpinRow.new_with_range(from, to, step);
+        spin.title = title;
+        if (subtitle !== null) {
+            spin.subtitle = subtitle
+        }
+        if (round) spin.set_value(this._settings.get_int(settingsKey));
+        else spin.set_value(this._settings.get_int(settingsKey));
+
+
+        spin.connect('input', (widget, value,  data) => {
+            if (round) this._settings.set_int(settingsKey, parseInt(widget.get_value(),10));
+            else this._settings.set_double(settingsKey, widget.get_value());
+
+            return false;
+        });
+        spin.connect('output', (widget, data) => {
+            if (round) this._settings.set_int(settingsKey, parseInt(widget.get_value(),10));
+            else this._settings.set_double(settingsKey, widget.get_value());
+
+            return false;
+        });
+
+        this.group.add(spin);
+    }
+});
 
 export default class DockPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
