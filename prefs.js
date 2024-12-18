@@ -6,6 +6,8 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
+import Adw from 'gi://Adw';
+import Gdk from 'gi://Gdk';
 
 import {
     ExtensionPreferences,
@@ -319,8 +321,81 @@ class AppIndicatorPreferences extends Gtk.Box {
     }
 });
 
+const SettingsKey = {
+    LEGACY_TRAY_ENABLED: 'legacy-tray-enabled',
+    ICON_SIZE: 'icon-size'
+}
+
+const GeneralPage = GObject.registerClass(
+    class AppIndicatorGeneralPage extends Adw.PreferencesPage {
+        _init(settings, settingsKey) {
+            super._init({
+                title: _('General'),
+                icon_name: 'general-symbolic',
+                name: 'General Page'
+            });
+
+            this._settings = settings;
+            this._settingsKey = settingsKey;
+
+            let group = new Adw.PreferencesGroup();  // no title since only single group
+
+            let legacyTraySwitch = new Adw.SwitchRow({
+                title: _('Enable Legacy Tray Icons support'),
+                subtitle: _('don\'t know what subtitle to put yet. maybe'), 
+                active: this._settings.get_boolean(this._settingsKey.LEGACY_TRAY_ENABLED)
+            });
+
+            let sizeSpin = Adw.SpinRow.new_with_range(0, 96, 2);
+            sizeSpin.title = "Icon Size";
+            sizeSpin.set_value(this._settings.get_int(this._settingsKey.ICON_SIZE));
+
+            /*
+        label = new Gtk.Label({
+            label: _('Icon size (min: 0, max: 96)'),
+            hexpand: true,
+            halign: Gtk.Align.START,
+        });
+        widget = new Gtk.SpinButton({halign: Gtk.Align.END});
+        widget.set_sensitive(true);
+        widget.set_range(0, 96);
+        widget.set_value(this._settings.get_int('icon-size'));
+        widget.set_increments(1, 2);
+        widget.connect('value-changed', w => {
+            this._settings.set_int('icon-size', w.get_value_as_int());
+        });*/
+
+            group.add(legacyTraySwitch);
+            group.add(sizeSpin);
+            this.add(group);
+
+            //==================
+            //   Bind Signals
+            //==================
+            legacyTraySwitch.connect('notify::active', (widget) => {
+                this._settings.set_boolean(this._settingsKey.LEGACY_TRAY_ENABLED, widget.get_active())
+            }); 
+            sizeSpin.connect('input', (widget, value,  data) => {
+                this._settings.set_int(this._settingsKey.ICON_SIZE, parseInt(widget.get_value(),10));
+                return false;
+            });
+            sizeSpin.connect('output', (widget, data) => {
+                this._settings.set_int(this._settingsKey.ICON_SIZE, parseInt(widget.get_value(),10));
+                return false;
+            });
+        }
+    }
+)
+
 export default class DockPreferences extends ExtensionPreferences {
-    getPreferencesWidget() {
-        return new AppIndicatorPreferences(this);
+    fillPreferencesWindow(window) {
+        const settings = this.getSettings();
+        const generalPage = new GeneralPage(settings, SettingsKey);
+
+        window.add(generalPage);
+
+        window.connect('close-request', () => {
+            window.destroy();
+        });
     }
 }
